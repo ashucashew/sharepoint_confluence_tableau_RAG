@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team RAG Chatbot</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .chat-container {
+            height: calc(100vh - 200px);
+        }
+        .message-bubble {
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        .typing-indicator {
+            display: none;
+        }
+        .typing-indicator.show {
+            display: flex;
+        }
+        .source-item {
+            transition: all 0.3s ease;
+        }
+        .source-item:hover {
+            background-color: #f3f4f6;
+        }
+        .scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .scrollbar-hide::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center py-4">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <i class="fas fa-robot text-2xl text-blue-600"></i>
+                        </div>
+                        <div class="ml-3">
+                            <h1 class="text-xl font-semibold text-gray-900">Team RAG Chatbot</h1>
+                            <p class="text-sm text-gray-500">Your AI assistant for team knowledge</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <button id="statusBtn" class="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200">
+                            <i class="fas fa-circle text-green-500 mr-2"></i>
+                            System Status
+                        </button>
+                        <button id="syncBtn" class="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
+                            <i class="fas fa-sync-alt mr-2"></i>
+                            Sync Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                <!-- Chat Interface -->
+                <div class="lg:col-span-3">
+                    <div class="bg-white rounded-lg shadow-sm border">
+                        <!-- Chat Header -->
+                        <div class="px-6 py-4 border-b">
+                            <div class="flex justify-between items-center">
+                                <h2 class="text-lg font-medium text-gray-900">Chat</h2>
+                                <div class="flex items-center space-x-2">
+                                    <button id="clearChatBtn" class="text-sm text-gray-500 hover:text-gray-700">
+                                        <i class="fas fa-trash mr-1"></i>
+                                        Clear Chat
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chat Messages -->
+                        <div id="chatMessages" class="chat-container overflow-y-auto p-6 scrollbar-hide">
+                            <!-- Welcome Message -->
+                            <div class="flex mb-4">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                                        <i class="fas fa-robot text-white text-sm"></i>
+                                    </div>
+                                </div>
+                                <div class="ml-3 message-bubble">
+                                    <div class="bg-blue-50 rounded-lg p-4">
+                                        <p class="text-gray-800">
+                                            Hello! I'm your AI assistant. I can help you find information from your team's documents including Confluence pages, Tableau dashboards, and Shareflow files. What would you like to know?
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Typing Indicator -->
+                        <div id="typingIndicator" class="typing-indicator px-6 py-2">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                                        <i class="fas fa-robot text-white text-sm"></i>
+                                    </div>
+                                </div>
+                                <div class="ml-3">
+                                    <div class="flex space-x-1">
+                                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                                        <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chat Input -->
+                        <div class="px-6 py-4 border-t">
+                            <form id="chatForm" class="flex space-x-4">
+                                <div class="flex-1">
+                                    <input 
+                                        type="text" 
+                                        id="messageInput" 
+                                        placeholder="Type your message here..."
+                                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        autocomplete="off"
+                                    >
+                                </div>
+                                <button 
+                                    type="submit" 
+                                    id="sendBtn"
+                                    class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+                                >
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sidebar -->
+                <div class="lg:col-span-1">
+                    <div class="space-y-6">
+                        <!-- Search -->
+                        <div class="bg-white rounded-lg shadow-sm border p-4">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">Search Documents</h3>
+                            <form id="searchForm" class="space-y-4">
+                                <input 
+                                    type="text" 
+                                    id="searchInput" 
+                                    placeholder="Search documents..."
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                <select id="sourceFilter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                    <option value="">All Sources</option>
+                                    <option value="confluence">Confluence</option>
+                                    <option value="tableau">Tableau</option>
+                                    <option value="sharepoint">SharePoint</option>
+                                </select>
+                                <button 
+                                    type="submit" 
+                                    class="w-full px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                                >
+                                    Search
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Sources -->
+                        <div class="bg-white rounded-lg shadow-sm border p-4">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">Sources</h3>
+                            <div id="sourcesList" class="space-y-2">
+                                <!-- Sources will be populated here -->
+                            </div>
+                        </div>
+
+                        <!-- System Info -->
+                        <div class="bg-white rounded-lg shadow-sm border p-4">
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">System Info</h3>
+                            <div id="systemInfo" class="space-y-2 text-sm text-gray-600">
+                                <!-- System info will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="statusModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white rounded-lg max-w-2xl w-full max-h-96 overflow-y-auto">
+                <div class="px-6 py-4 border-b">
+                    <h3 class="text-lg font-medium text-gray-900">System Status</h3>
+                </div>
+                <div id="statusContent" class="px-6 py-4">
+                    <!-- Status content will be populated here -->
+                </div>
+                <div class="px-6 py-4 border-t">
+                    <button id="closeStatusModal" class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let conversationId = null;
+        let websocket = null;
+
+        // Initialize WebSocket connection
+        function initWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
+            
+            websocket = new WebSocket(wsUrl);
+            
+            websocket.onopen = function(event) {
+                console.log('WebSocket connected');
+            };
+            
+            websocket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                displayMessage(data.response, 'assistant', data.sources);
+                hideTypingIndicator();
+            };
+            
+            websocket.onclose = function(event) {
+                console.log('WebSocket disconnected');
+                // Reconnect after 5 seconds
+                setTimeout(initWebSocket, 5000);
+            };
+            
+            websocket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        // Display message in chat
+        function displayMessage(message, sender, sources = []) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex mb-4';
+            
+            if (sender === 'user') {
+                messageDiv.innerHTML = `
+                    <div class="flex-1"></div>
+                    <div class="flex-shrink-0">
+                        <div class="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
+                            <i class="fas fa-user text-white text-sm"></i>
+                        </div>
+                    </div>
+                    <div class="ml-3 message-bubble">
+                        <div class="bg-gray-600 text-white rounded-lg p-4">
+                            <p>${escapeHtml(message)}</p>
+                        </div>
+                    </div>
+                `;
+            } else {
+                let sourcesHtml = '';
+                if (sources && sources.length > 0) {
+                    sourcesHtml = `
+                        <div class="mt-3 pt-3 border-t border-gray-200">
+                            <p class="text-xs text-gray-500 mb-2">Sources:</p>
+                            ${sources.map(source => `
+                                <div class="source-item p-2 rounded cursor-pointer" onclick="window.open('${source.source_url}', '_blank')">
+                                    <div class="text-xs font-medium text-blue-600">${source.title}</div>
+                                    <div class="text-xs text-gray-500">${source.source_type} • ${Math.round(source.relevance_score * 100)}% relevant</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+                
+                messageDiv.innerHTML = `
+                    <div class="flex-shrink-0">
+                        <div class="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                            <i class="fas fa-robot text-white text-sm"></i>
+                        </div>
+                    </div>
+                    <div class="ml-3 message-bubble">
+                        <div class="bg-blue-50 rounded-lg p-4">
+                            <p class="text-gray-800">${formatMessage(message)}</p>
+                            ${sourcesHtml}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Format message with markdown-like formatting
+        function formatMessage(message) {
+            return message
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code class="bg-gray-200 px-1 rounded">$1</code>')
+                .replace(/\n/g, '<br>');
+        }
+
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Show typing indicator
+        function showTypingIndicator() {
+            document.getElementById('typingIndicator').classList.add('show');
+        }
+
+        // Hide typing indicator
+        function hideTypingIndicator() {
+            document.getElementById('typingIndicator').classList.remove('show');
+        }
+
+        // Send message
+        function sendMessage(message) {
+            if (!message.trim()) return;
+            
+            // Display user message
+            displayMessage(message, 'user');
+            
+            // Show typing indicator
+            showTypingIndicator();
+            
+            // Send via WebSocket
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                const data = {
+                    message: message,
+                    conversation_id: conversationId,
+                    include_sources: true,
+                    max_sources: 3
+                };
+                websocket.send(JSON.stringify(data));
+            } else {
+                // Fallback to HTTP API
+                fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        conversation_id: conversationId,
+                        include_sources: true,
+                        max_sources: 3
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    displayMessage(data.response, 'assistant', data.sources);
+                    hideTypingIndicator();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    displayMessage('Sorry, I encountered an error. Please try again.', 'assistant');
+                    hideTypingIndicator();
+                });
+            }
+        }
+
+        // Search documents
+        function searchDocuments(query, filterSource = '') {
+            fetch('/api/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    query: query,
+                    n_results: 5,
+                    filter_source: filterSource || null
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                displaySearchResults(data.results);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        }
+
+        // Display search results
+        function displaySearchResults(results) {
+            const chatMessages = document.getElementById('chatMessages');
+            const resultsDiv = document.createElement('div');
+            resultsDiv.className = 'flex mb-4';
+            
+            let resultsHtml = '<div class="bg-yellow-50 rounded-lg p-4 w-full">';
+            resultsHtml += '<h4 class="font-medium text-gray-900 mb-2">Search Results:</h4>';
+            
+            if (results.length === 0) {
+                resultsHtml += '<p class="text-gray-600">No documents found.</p>';
+            } else {
+                results.forEach(result => {
+                    resultsHtml += `
+                        <div class="source-item p-2 rounded cursor-pointer mb-2" onclick="window.open('${result.metadata.source_url}', '_blank')">
+                            <div class="text-sm font-medium text-blue-600">${result.metadata.title}</div>
+                            <div class="text-xs text-gray-500">${result.metadata.source_type} • ${Math.round((1 - result.relevance_score) * 100)}% relevant</div>
+                            <div class="text-xs text-gray-600 mt-1">${result.content.substring(0, 150)}...</div>
+                        </div>
+                    `;
+                });
+            }
+            
+            resultsHtml += '</div>';
+            
+            resultsDiv.innerHTML = `
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
+                        <i class="fas fa-search text-white text-sm"></i>
+                    </div>
+                </div>
+                <div class="ml-3 w-full">
+                    ${resultsHtml}
+                </div>
+            `;
+            
+            chatMessages.appendChild(resultsDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Load system status
+        function loadSystemStatus() {
+            fetch('/api/status')
+            .then(response => response.json())
+            .then(data => {
+                updateSystemInfo(data);
+            })
+            .catch(error => {
+                console.error('Error loading status:', error);
+            });
+        }
+
+        // Update system info
+        function updateSystemInfo(data) {
+            const systemInfo = document.getElementById('systemInfo');
+            const chatbot = data.chatbot || {};
+            const syncManager = data.sync_manager || {};
+            
+            systemInfo.innerHTML = `
+                <div class="flex justify-between">
+                    <span>Chatbot Status:</span>
+                    <span class="${chatbot.initialized ? 'text-green-600' : 'text-red-600'}">
+                        ${chatbot.initialized ? 'Online' : 'Offline'}
+                    </span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Total Messages:</span>
+                    <span>${chatbot.total_messages || 0}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Documents:</span>
+                    <span>${chatbot.vector_store_stats?.total_documents || 0}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Sync Status:</span>
+                    <span class="${syncManager.scheduler_running ? 'text-green-600' : 'text-red-600'}">
+                        ${syncManager.scheduler_running ? 'Running' : 'Stopped'}
+                    </span>
+                </div>
+            `;
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize WebSocket
+            initWebSocket();
+            
+            // Load initial system status
+            loadSystemStatus();
+            
+            // Chat form
+            document.getElementById('chatForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const input = document.getElementById('messageInput');
+                const message = input.value.trim();
+                if (message) {
+                    sendMessage(message);
+                    input.value = '';
+                }
+            });
+            
+            // Search form
+            document.getElementById('searchForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const query = document.getElementById('searchInput').value.trim();
+                const filterSource = document.getElementById('sourceFilter').value;
+                if (query) {
+                    searchDocuments(query, filterSource);
+                    document.getElementById('searchInput').value = '';
+                }
+            });
+            
+            // Status button
+            document.getElementById('statusBtn').addEventListener('click', function() {
+                fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('statusContent').innerHTML = `
+                        <pre class="text-sm">${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                    document.getElementById('statusModal').classList.remove('hidden');
+                });
+            });
+            
+            // Close status modal
+            document.getElementById('closeStatusModal').addEventListener('click', function() {
+                document.getElementById('statusModal').classList.add('hidden');
+            });
+            
+            // Sync button
+            document.getElementById('syncBtn').addEventListener('click', function() {
+                this.disabled = true;
+                this.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Syncing...';
+                
+                fetch('/api/sync', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        force_full_sync: false
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    alert('Sync completed!');
+                    loadSystemStatus();
+                })
+                .catch(error => {
+                    alert('Sync failed: ' + error.message);
+                })
+                .finally(() => {
+                    this.disabled = false;
+                    this.innerHTML = '<i class="fas fa-sync-alt mr-2"></i>Sync Data';
+                });
+            });
+            
+            // Clear chat button
+            document.getElementById('clearChatBtn').addEventListener('click', function() {
+                if (confirm('Are you sure you want to clear the chat history?')) {
+                    document.getElementById('chatMessages').innerHTML = '';
+                    conversationId = null;
+                }
+            });
+            
+            // Enter key in message input
+            document.getElementById('messageInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    document.getElementById('chatForm').dispatchEvent(new Event('submit'));
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
