@@ -59,49 +59,35 @@ def get_system_status():
         print(f"❌ Error getting system status: {e}")
         raise
 
-# Task 3: Manual sync trigger
-def trigger_sync():
-    """Trigger a manual sync of all sources"""
+# Task 3: Sync data sources
+def sync_data_sources():
+    """Sync all data sources"""
     try:
-        response = requests.post("http://localhost:8000/api/sync", timeout=60)
-        if response.status_code == 200:
-            result = response.json()
-            print(f"🔄 Sync triggered: {json.dumps(result, indent=2)}")
-            return result
-        else:
-            print("❌ Sync trigger failed")
-            return None
-    except Exception as e:
-        print(f"❌ Error triggering sync: {e}")
-        raise
-
-# Task 4: Cleanup orphaned documents
-def cleanup_orphaned_documents():
-    """Clean up orphaned documents from vector store"""
-    try:
-        print("🧹 Starting orphaned document cleanup")
+        print("🔄 Starting data source synchronization")
         
-        response = requests.post("http://localhost:8000/api/cleanup", timeout=300)
+        response = requests.post("http://localhost:8000/api/sync", timeout=300)
         if response.status_code == 200:
             result = response.json()
-            cleanup_data = result.get("result", {})
-            documents_cleaned = cleanup_data.get("documents_cleaned", 0)
+            sync_data = result.get("result", {})
+            documents_processed = sync_data.get("documents_processed", 0)
+            documents_added = sync_data.get("documents_added", 0)
+            documents_updated = sync_data.get("documents_updated", 0)
+            documents_deleted = sync_data.get("documents_deleted", 0)
             
-            print(f"✅ Cleanup completed: {documents_cleaned} documents cleaned")
-            return cleanup_data
+            print(f"✅ Sync completed: {documents_processed} processed, {documents_added} added, {documents_updated} updated, {documents_deleted} deleted")
+            return sync_data
         else:
-            print("❌ Cleanup failed")
+            print("❌ Sync failed")
             return None
     except Exception as e:
-        print(f"❌ Error during cleanup: {e}")
-        raise
+        print(f"❌ Error during sync: {e}")
+        return None
 
-# Task 5: Print completion message
-def print_completion():
-    """Print completion message"""
-    print("🎉 RAG pipeline completed successfully!")
-    print("📅 Date:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    return "completed"
+# Task 4: Log completion
+def log_completion():
+    """Log completion of the DAG"""
+    print("✅ Simple RAG DAG completed successfully")
+    return {"status": "completed", "timestamp": datetime.now().isoformat()}
 
 # Define the tasks
 health_check_task = PythonOperator(
@@ -118,21 +104,15 @@ status_task = PythonOperator(
 
 sync_task = PythonOperator(
     task_id='trigger_sync',
-    python_callable=trigger_sync,
-    dag=dag
-)
-
-cleanup_task = PythonOperator(
-    task_id='cleanup_orphaned',
-    python_callable=cleanup_orphaned_documents,
+    python_callable=sync_data_sources,
     dag=dag
 )
 
 completion_task = PythonOperator(
     task_id='print_completion',
-    python_callable=print_completion,
+    python_callable=log_completion,
     dag=dag
 )
 
 # Define the task dependencies (workflow)
-health_check_task >> status_task >> sync_task >> cleanup_task >> completion_task
+health_check_task >> status_task >> sync_task >> completion_task

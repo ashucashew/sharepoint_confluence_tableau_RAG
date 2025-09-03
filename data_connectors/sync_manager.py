@@ -125,7 +125,19 @@ class DataSyncManager:
             
             logger.info(f"📄 Fetched {len(documents)} documents from {source_name} using {sync_strategy} strategy")
             
-            if not documents:
+            # Get existing documents from vector store for comparison
+            existing_docs = await self.vector_store.get_all_documents(
+                filter_metadata={"source_type": source_name}
+            )
+            existing_ids = {doc["id"] for doc in existing_docs}
+            
+            # Create set of current document IDs from source
+            current_doc_ids = {doc.id for doc in documents}
+            
+            # Identify deleted documents (exist in vector store but not in current source)
+            deleted_doc_ids = existing_ids - current_doc_ids
+            
+            if not documents and not deleted_doc_ids:
                 result = {
                     "status": "success",
                     "result": {
@@ -149,12 +161,6 @@ class DataSyncManager:
             
             # For incremental sync, we need to check if documents already exist
             if sync_strategy == "incremental" and last_sync_time:
-                # Get existing document IDs from vector store
-                existing_docs = await self.vector_store.get_all_documents(
-                    filter_metadata={"source_type": source_name}
-                )
-                existing_ids = {doc["id"] for doc in existing_docs}
-                
                 # Separate new and existing documents
                 new_docs = []
                 existing_docs_to_update = []
@@ -165,7 +171,7 @@ class DataSyncManager:
                     else:
                         new_docs.append(doc)
                 
-                logger.info(f"📊 {source_name}: {len(new_docs)} new, {len(existing_docs_to_update)} existing documents")
+                logger.info(f"📊 {source_name}: {len(new_docs)} new, {len(existing_docs_to_update)} existing, {len(deleted_doc_ids)} deleted")
                 
                 # Add new documents
                 if new_docs:
@@ -194,6 +200,23 @@ class DataSyncManager:
                 else:
                     logger.error(f"❌ Failed to add documents from {source_name}")
             
+            # Remove deleted documents from vector store
+            if deleted_doc_ids:
+                logger.info(f"🗑️ Removing {len(deleted_doc_ids)} deleted documents from {source_name}")
+                try:
+                    # Convert to list of document IDs for deletion
+                    deleted_doc_list = list(deleted_doc_ids)
+                    success = await self.vector_store.delete_documents(deleted_doc_list)
+                    if success:
+                        documents_deleted = len(deleted_doc_ids)
+                        logger.info(f"✅ Successfully removed {documents_deleted} deleted documents from {source_name}")
+                    else:
+                        logger.error(f"❌ Failed to remove deleted documents from {source_name}")
+                except Exception as e:
+                    logger.error(f"❌ Error removing deleted documents from {source_name}: {e}")
+                    # Don't fail the entire sync if cleanup fails
+                    documents_deleted = 0
+            
             result = {
                 "status": "success",
                 "result": {
@@ -211,7 +234,7 @@ class DataSyncManager:
             # Update sync history
             self._update_sync_history(source_name, result["result"])
             
-            logger.info(f"✅ Sync for {source_name} completed: {documents_added} added, {documents_updated} updated")
+            logger.info(f"✅ Sync for {source_name} completed: {documents_added} added, {documents_updated} updated, {documents_deleted} deleted")
             return result
             
         except Exception as e:
@@ -463,131 +486,6 @@ class DataSyncManager:
                 return await self.sync_all_sources(force_full_sync=True)
         except Exception as e:
             logger.error(f"Error in force full sync: {e}")
-            return {
-                "status": "error",
-                "error": str(e)
-            }
-    
-    async def get_sync_statistics(self) -> Dict[str, Any]:
-        """Get detailed sync statistics and history"""
-        try:
-            history = self._load_sync_history()
-            
-            # Calculate statistics for each source
-            source_stats = {}
-            total_syncs = 0
-            total_documents_processed = 0
-            total_documents_added = 0
-            total_documents_updated = 0
-            total_documents_deleted = 0
-            
-            for source_name in ["confluence", "sharepoint", "tableau"]:
-                source_history = history.get(source_name, {})
-                if source_history:
-                    last_sync = source_history.get('last_sync')
-                    last_result = source_history.get('last_sync_result', {})
-                    
-                    source_stats[source_name] = {
-                        "enabled": bool(getattr(settings, f"{source_name}_url", None)),
-                        "last_sync": last_sync,
-                        "last_sync_strategy": last_result.get('sync_strategy', 'unknown'),
-                        "documents_processed": last_result.get('documents_processed', 0),
-                        "documents_added": last_result.get('documents_added', 0),
-                        "documents_updated": last_result.get('documents_updated', 0),
-                        "documents_deleted": last_result.get('documents_deleted', 0),
-                        "sync_status": "up_to_date" if last_sync else "never_synced"
-                    }
-                    
-                    total_syncs += 1
-                    total_documents_processed += last_result.get('documents_processed', 0)
-                    total_documents_added += last_result.get('documents_added', 0)
-                    total_documents_updated += last_result.get('documents_updated', 0)
-                    total_documents_deleted += last_result.get('documents_deleted', 0)
-                else:
-                    source_stats[source_name] = {
-                        "enabled": bool(getattr(settings, f"{source_name}_url", None)),
-                        "last_sync": None,
-                        "last_sync_strategy": None,
-                        "documents_processed": 0,
-                        "documents_added": 0,
-                        "documents_updated": 0,
-                        "documents_deleted": 0,
-                        "sync_status": "never_synced"
-                    }
-            
-            # Calculate overall statistics
-            overall_stats = {
-                "total_sources_enabled": len([s for s in source_stats.values() if s["enabled"]]),
-                "total_sources_synced": total_syncs,
-                "total_documents_processed": total_documents_processed,
-                "total_documents_added": total_documents_added,
-                "total_documents_updated": total_documents_updated,
-                "total_documents_deleted": total_documents_deleted,
-                "sync_efficiency": {
-                    "new_documents_rate": (total_documents_added / max(total_documents_processed, 1)) * 100,
-                    "update_rate": (total_documents_updated / max(total_documents_processed, 1)) * 100,
-                    "deletion_rate": (total_documents_deleted / max(total_documents_processed, 1)) * 100
-                }
-            }
-            
-            return {
-                "status": "success",
-                "data": {
-                    "source_statistics": source_stats,
-                    "overall_statistics": overall_stats,
-                    "sync_history_file": self.sync_history_file,
-                    "last_updated": datetime.now().isoformat()
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting sync statistics: {e}")
-            return {
-                "status": "error",
-                "error": str(e)
-            }
-    
-    async def force_full_sync(self, source_name: str = None) -> Dict[str, Any]:
-        """Force a full sync for a specific source or all sources"""
-        try:
-            if source_name:
-                logger.info(f"🔄 Force full sync requested for {source_name}")
-                return await self.sync_source(source_name, force_full_sync=True)
-            else:
-                logger.info("🔄 Force full sync requested for all sources")
-                return await self.sync_all_sources(force_full_sync=True)
-        except Exception as e:
-            logger.error(f"Error in force full sync: {e}")
-            return {
-                "status": "error",
-                "error": str(e)
-            }
-    
-    async def cleanup_orphaned_documents(self, dry_run: bool = False) -> Dict[str, Any]:
-        """Clean up orphaned documents from the vector store"""
-        try:
-            logger.info("🧹 Starting orphaned document cleanup")
-            
-            # This would implement logic to:
-            # 1. Get all documents from vector store
-            # 2. Check which ones still exist in source systems
-            # 3. Remove orphaned ones
-            
-            # For now, returning mock data
-            result = {
-                "status": "success",
-                "result": {
-                    "documents_cleaned": 0,
-                    "cleanup_timestamp": datetime.now().isoformat(),
-                    "dry_run": dry_run
-                }
-            }
-            
-            logger.info("✅ Cleanup completed")
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error during cleanup: {e}")
             return {
                 "status": "error",
                 "error": str(e)

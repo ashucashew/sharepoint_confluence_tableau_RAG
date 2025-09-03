@@ -60,9 +60,6 @@ class SearchRequest(BaseModel):
 class SyncRequest(BaseModel):
     force_full_sync: bool = False
 
-class CleanupRequest(BaseModel):
-    dry_run: bool = False
-
 class EmbeddingRefreshRequest(BaseModel):
     embedding_created_at: Dict[str, str]
 
@@ -237,26 +234,6 @@ async def get_sync_status():
         
     except Exception as e:
         logger.error(f"Error getting sync status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/cleanup")
-async def cleanup_orphaned(request: CleanupRequest = CleanupRequest()):
-    """Clean up orphaned documents"""
-    try:
-        logger.info("🧹 Starting orphaned document cleanup")
-        
-        # Use the sync manager
-        from data_connectors import DataSyncManager
-        sync_manager = DataSyncManager()
-        await sync_manager.initialize()
-        
-        result = await sync_manager.cleanup_orphaned_documents(request.dry_run)
-        
-        logger.info("✅ Cleanup completed")
-        return result
-        
-    except Exception as e:
-        logger.error(f"Error during cleanup: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/embeddings/refresh")

@@ -183,31 +183,26 @@ Documents Updated: 3
 
 ## Troubleshooting
 
-### **Common Issues**
+### **Common Issues and Solutions**
 
-1. **Sync Always Full**
-   - Check if `fetch_recent_documents` is implemented in connectors
-   - Verify last sync time is being recorded
-   - Check sync history file permissions
+#### **1. RAG System Issues**
+- **Chatbot Not Responding**: Check OpenAI API key and vector store initialization
+- **Poor Search Results**: Verify document sync status and embedding quality
+- **Query Rewriting Failures**: Check OpenAI API connectivity
 
-2. **Performance Issues**
-   - Monitor document counts over time
-   - Check if cleanup is removing orphaned documents
-   - Verify incremental sync is working
+#### **2. Airflow Pipeline Issues**
+- **DAG Failures**: Check Airflow logs and system health
+- **Sync Failures**: Verify data source credentials and permissions
+- **Performance Issues**: Monitor resource usage and optimize DAG scheduling
 
-3. **Data Inconsistencies**
-   - Force full sync to refresh all data
-   - Check connector implementations
-   - Review sync history for errors
+#### **3. Data Source Issues**
+- **Connection Errors**: Verify API credentials, URLs, and network connectivity
+- **Rate Limiting**: Check API quotas and implement backoff strategies
+- **Authentication Failures**: Ensure proper token management and rotation
 
 ### **Debug Mode**
 
-Enable detailed logging:
-
-```python
-import logging
-logging.basicConfig(level=logging.DEBUG)
-```
+Enable debug mode by setting `DEBUG=True` in your `.env` file for detailed logging.
 
 ## Best Practices
 
@@ -224,9 +219,9 @@ logging.basicConfig(level=logging.DEBUG)
    - Monitor resource usage
 
 3. **Data Quality**
-   - Regular cleanup of orphaned documents
    - Monitor sync efficiency metrics
    - Validate document counts
+   - Check deletion counts in sync statistics
 
 ### **Maintenance**
 

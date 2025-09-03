@@ -114,66 +114,30 @@ def sync_data_source(source_name: str):
     
     return _sync_source
 
-def cleanup_orphaned_documents():
-    """Clean up orphaned documents from vector store"""
-    try:
-        logging.info("🧹 Starting orphaned document cleanup")
-        
-        response = requests.post(f"{RAG_API_BASE_URL}/api/cleanup", timeout=300)
-        response.raise_for_status()
-        
-        result = response.json()
-        logging.info(f"🧹 Cleanup result: {json.dumps(result, indent=2)}")
-        
-        cleanup_data = result.get("result", {})
-        documents_cleaned = cleanup_data.get("documents_cleaned", 0)
-        
-        logging.info(f"✅ Cleanup completed: {documents_cleaned} documents cleaned")
-        
-        return {
-            "status": "success",
-            "documents_cleaned": documents_cleaned
-        }
-        
-    except Exception as e:
-        logging.error(f"Error during cleanup: {e}")
-        raise
-
 def refresh_old_embeddings():
-    """Refresh embeddings that are older than 7 days"""
+    """Refresh old embeddings"""
     try:
-        logging.info("🔄 Starting old embedding refresh")
+        logging.info("🔄 Starting embedding refresh")
         
-        # Calculate date 7 days ago
-        seven_days_ago = (datetime.now() - timedelta(days=7)).isoformat()
+        response = requests.post(f"{RAG_API_BASE_URL}/api/embeddings/refresh", 
+                               json={"embedding_created_at": {}}, timeout=300)
         
-        payload = {
-            "embedding_created_at": {"$lt": seven_days_ago}
-        }
-        
-        response = requests.post(
-            f"{RAG_API_BASE_URL}/api/embeddings/refresh",
-            json=payload,
-            timeout=300
-        )
-        response.raise_for_status()
-        
-        result = response.json()
-        logging.info(f"🔄 Refresh result: {json.dumps(result, indent=2)}")
-        
-        refresh_data = result.get("data", {})
-        documents_to_refresh = refresh_data.get("documents_to_refresh", 0)
-        
-        logging.info(f"📊 Refresh analysis completed: {documents_to_refresh} documents need refreshing")
-        
-        return {
-            "status": "success",
-            "documents_to_refresh": documents_to_refresh
-        }
-        
+        if response.status_code == 200:
+            result = response.json()
+            logging.info(f"🔄 Embedding refresh result: {json.dumps(result, indent=2)}")
+            
+            refresh_data = result.get("data", {})
+            documents_to_refresh = refresh_data.get("documents_to_refresh", 0)
+            
+            logging.info(f"✅ Embedding refresh completed: {documents_to_refresh} documents to refresh")
+            return refresh_data
+        else:
+            logging.error(f"❌ Embedding refresh failed with status {response.status_code}")
+            return None
+            
     except Exception as e:
         logging.error(f"Error during embedding refresh: {e}")
-        raise
+        return None
 
 def get_embedding_stats():
     """Get embedding statistics for monitoring"""
@@ -216,7 +180,6 @@ def generate_daily_report(**context):
             except:
                 pass
         
-        cleanup_result = ti.xcom_pull(task_ids='cleanup_orphaned')
         refresh_result = ti.xcom_pull(task_ids='refresh_old_embeddings')
         stats_result = ti.xcom_pull(task_ids='get_embedding_stats')
         
@@ -225,7 +188,6 @@ def generate_daily_report(**context):
             "date": datetime.now().strftime("%Y-%m-%d"),
             "pipeline_status": "completed",
             "sync_results": sync_results,
-            "cleanup": cleanup_result,
             "refresh": refresh_result,
             "stats": stats_result
         }
@@ -276,13 +238,6 @@ sync_tableau = PythonOperator(
     dag=dag
 )
 
-# Cleanup task
-cleanup_orphaned = PythonOperator(
-    task_id='cleanup_orphaned',
-    python_callable=cleanup_orphaned_documents,
-    dag=dag
-)
-
 # Refresh old embeddings
 refresh_old_embeddings_task = PythonOperator(
     task_id='refresh_old_embeddings',
@@ -311,8 +266,7 @@ health_check >> get_sync_status_task
 get_sync_status_task >> [sync_confluence, sync_sharepoint, sync_tableau]
 
 # Sequential maintenance tasks
-[sync_confluence, sync_sharepoint, sync_tableau] >> cleanup_orphaned
-cleanup_orphaned >> refresh_old_embeddings_task
+[sync_confluence, sync_sharepoint, sync_tableau] >> refresh_old_embeddings_task
 refresh_old_embeddings_task >> get_embedding_stats_task
 
 # Reporting
