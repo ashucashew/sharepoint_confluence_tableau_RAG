@@ -225,18 +225,13 @@ Please provide a helpful and accurate response based on the context provided. If
             What factors could lead to reduced solar generation output, such as inverter efficiency issues, DC/AC conversion losses, shading, 
             soiling, wiring or connection faults, rapid shutdown device problems, degradation of PV modules, monitoring calibration errors, 
             or site-specific environmental conditions?"
-
-
-            
-
-            
             """
 
             # Prepare conversation context for the prompt
             conversation_context = ""
             if conversation_history and len(conversation_history) > 0:
                 # Get last 3 user messages for context (excluding current query)
-                recent_messages = conversation_history[-3:]  # Last 3 messages
+                recent_messages = conversation_history[-5:]  # Last 5 messages
                 conversation_context = "Recent conversation context:\n"
                 for i, msg in enumerate(recent_messages, 1):
                     if msg.get('user_message'):
@@ -245,7 +240,7 @@ Please provide a helpful and accurate response based on the context provided. If
                             conversation_context += f"   Assistant: {msg['assistant_response'][:200]}...\n"
                 conversation_context += "\n"
             
-            user_prompt = f"""{conversation_context}Original query: {user_query}
+            user_prompt = f"""{conversation_context} Original query: {user_query}
 
 Please rewrite this query considering the conversation context above. If this is a follow-up question, incorporate relevant details from the conversation.
 
@@ -280,23 +275,23 @@ Rewritten query:"""
         """Create the system prompt for the chatbot"""
         base_prompt = """You are a helpful AI assistant for a team's knowledge base. You have access to documents from multiple sources including:
 
-1. Confluence pages and blog posts
-2. Tableau dashboards and workbooks
-3. SharePoint documents (presentations, tables, word docs)
+            1. Confluence pages and blog posts
+            2. Tableau dashboards and workbooks
+            3. SharePoint documents (presentations, tables, word docs)
 
-Your role is to:
-- Provide accurate and helpful answers based on the team's documents
-- Cite specific sources when possible
-- Be conversational and professional
-- If you don't have enough information, suggest where to find more details
-- Focus on practical, actionable information
+            Your role is to:
+            - Provide accurate and helpful answers based on the team's documents
+            - Cite specific sources when possible
+            - Be conversational and professional
+            - If you don't have enough information, suggest where to find more details
+            - Focus on practical, actionable information
 
-Guidelines:
-- Always base your responses on the team's documents
-- Be concise but thorough
-- Use a professional but friendly tone
-- If the context doesn't contain relevant information, acknowledge this and suggest alternative sources
-- When citing sources, mention the document title and source type"""
+            Guidelines:
+            - Always base your responses on the team's documents
+            - Be concise but thorough
+            - Use a professional but friendly tone
+            - If the context doesn't contain relevant information, acknowledge this and suggest alternative sources
+            - When citing sources, mention the document title and source type"""
 
         if include_sources:
             base_prompt += "\n\nWhen providing information, you may reference specific documents and sources to support your answers."
@@ -372,7 +367,7 @@ Guidelines:
     async def get_chatbot_stats(self) -> Dict[str, Any]:
         """Get chatbot statistics"""
         try:
-            vector_stats = await self.vector_store.get_collection_stats()
+            vector_stats = await self.vector_store.get_embedding_stats()
             
             return {
                 "total_conversations": len(set(msg.get('conversation_id') for msg in self.conversation_history if msg.get('conversation_id'))),
@@ -391,9 +386,9 @@ Guidelines:
             if not self.initialized:
                 return False
             
-            # Check vector store
-            stats = await self.vector_store.get_collection_stats()
-            if not stats:
+            # Check vector store - use existing method
+            stats = await self.vector_store.get_embedding_stats()
+            if not stats or "error" in stats:
                 return False
             
             # Check OpenAI connection (simple test)

@@ -75,7 +75,28 @@ def trigger_sync():
         print(f"❌ Error triggering sync: {e}")
         raise
 
-# Task 4: Print completion message
+# Task 4: Cleanup orphaned documents
+def cleanup_orphaned_documents():
+    """Clean up orphaned documents from vector store"""
+    try:
+        print("🧹 Starting orphaned document cleanup")
+        
+        response = requests.post("http://localhost:8000/api/cleanup", timeout=300)
+        if response.status_code == 200:
+            result = response.json()
+            cleanup_data = result.get("result", {})
+            documents_cleaned = cleanup_data.get("documents_cleaned", 0)
+            
+            print(f"✅ Cleanup completed: {documents_cleaned} documents cleaned")
+            return cleanup_data
+        else:
+            print("❌ Cleanup failed")
+            return None
+    except Exception as e:
+        print(f"❌ Error during cleanup: {e}")
+        raise
+
+# Task 5: Print completion message
 def print_completion():
     """Print completion message"""
     print("🎉 RAG pipeline completed successfully!")
@@ -101,6 +122,12 @@ sync_task = PythonOperator(
     dag=dag
 )
 
+cleanup_task = PythonOperator(
+    task_id='cleanup_orphaned',
+    python_callable=cleanup_orphaned_documents,
+    dag=dag
+)
+
 completion_task = PythonOperator(
     task_id='print_completion',
     python_callable=print_completion,
@@ -108,4 +135,4 @@ completion_task = PythonOperator(
 )
 
 # Define the task dependencies (workflow)
-health_check_task >> status_task >> sync_task >> completion_task
+health_check_task >> status_task >> sync_task >> cleanup_task >> completion_task

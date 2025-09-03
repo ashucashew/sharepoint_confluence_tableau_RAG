@@ -222,6 +222,9 @@ class DocumentProcessor:
         # Split content into chunks
         text_chunks = self._split_text(cleaned_content)
         
+        # Initialize chunks list
+        chunks = []
+        
         # Create chunk objects
         for i, chunk_text in enumerate(text_chunks):
             chunk_id = f"{document.id}_chunk_{i + 1}"

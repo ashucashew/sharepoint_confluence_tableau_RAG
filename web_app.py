@@ -14,6 +14,8 @@ from rag_chatbot import RAGChatbot
 from vector_store import VectorStore
 from config import settings
 from loguru import logger
+from config import DATA_SOURCES
+from data_connectors import get_connector
 
 # Configure logging
 import logging
@@ -54,6 +56,15 @@ class SearchRequest(BaseModel):
     query: str
     n_results: int = 5
     filter_source: Optional[str] = None
+
+class SyncRequest(BaseModel):
+    force_full_sync: bool = False
+
+class CleanupRequest(BaseModel):
+    dry_run: bool = False
+
+class EmbeddingRefreshRequest(BaseModel):
+    embedding_created_at: Dict[str, str]
 
 # Startup event
 @app.on_event("startup")
@@ -166,6 +177,217 @@ async def rewrite_query_endpoint(request: dict):
         
     except Exception as e:
         logger.error(f"Error in query rewriting endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# NEW: Sync endpoints for DAGs
+@app.post("/api/sync")
+async def sync_all_sources(request: SyncRequest = SyncRequest()):
+    """Sync all data sources"""
+    try:
+        logger.info("🔄 Starting sync of all data sources")
+        
+        # Use the sync manager
+        from data_connectors import DataSyncManager
+        sync_manager = DataSyncManager()
+        await sync_manager.initialize()
+        
+        result = await sync_manager.sync_all_sources(request.force_full_sync)
+        
+        logger.info("✅ Sync of all sources completed")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in sync all sources: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/sync/{source_name}")
+async def sync_source(source_name: str, request: SyncRequest = SyncRequest()):
+    """Sync a specific data source"""
+    try:
+        logger.info(f"🔄 Starting sync for {source_name}")
+        
+        # Use the sync manager
+        from data_connectors import DataSyncManager
+        sync_manager = DataSyncManager()
+        await sync_manager.initialize()
+        
+        result = await sync_manager.sync_source(source_name, request.force_full_sync)
+        
+        logger.info(f"✅ Sync for {source_name} completed")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error syncing {source_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/sync-status")
+async def get_sync_status():
+    """Get sync status for all data sources"""
+    try:
+        logger.info("📊 Getting sync status")
+        
+        # Use the sync manager
+        from data_connectors import DataSyncManager
+        sync_manager = DataSyncManager()
+        await sync_manager.initialize()
+        
+        status = await sync_manager.get_sync_status()
+        
+        return status
+        
+    except Exception as e:
+        logger.error(f"Error getting sync status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/cleanup")
+async def cleanup_orphaned(request: CleanupRequest = CleanupRequest()):
+    """Clean up orphaned documents"""
+    try:
+        logger.info("🧹 Starting orphaned document cleanup")
+        
+        # Use the sync manager
+        from data_connectors import DataSyncManager
+        sync_manager = DataSyncManager()
+        await sync_manager.initialize()
+        
+        result = await sync_manager.cleanup_orphaned_documents(request.dry_run)
+        
+        logger.info("✅ Cleanup completed")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/embeddings/refresh")
+async def refresh_embeddings(request: EmbeddingRefreshRequest):
+    """Refresh old embeddings"""
+    try:
+        logger.info("🔄 Starting embedding refresh")
+        
+        # This would call your vector store refresh method
+        # For now, returning mock data
+        result = {
+            "status": "success",
+            "data": {
+                "documents_to_refresh": 0,
+                "refresh_timestamp": datetime.now().isoformat(),
+                "criteria": request.embedding_created_at
+            }
+        }
+        
+        logger.info("✅ Embedding refresh analysis completed")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error during embedding refresh: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/embedding-stats")
+async def get_embedding_stats():
+    """Get embedding statistics"""
+    try:
+        logger.info("📊 Getting embedding statistics")
+        
+        # This would call your vector store stats method
+        # For now, returning mock data
+        stats = {
+            "status": "success",
+            "data": {
+                "total_embeddings": 0,
+                "embedding_models": {},
+                "chunk_types": {},
+                "embedding_age_stats": {}
+            }
+        }
+        
+        return stats
+        
+    except Exception as e:
+        logger.error(f"Error getting embedding stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/collection-stats")
+async def get_collection_stats():
+    """Get collection statistics"""
+    try:
+        logger.info("📊 Getting collection statistics")
+        
+        # This would call your vector store collection stats method
+        # For now, returning mock data
+        stats = {
+            "status": "success",
+            "data": {
+                "total_documents": 0,
+                "total_chunks": 0,
+                "collection_size_mb": 0,
+                "last_updated": datetime.now().isoformat()
+            }
+        }
+        
+        return stats
+        
+    except Exception as e:
+        logger.error(f"Error getting collection stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/status")
+async def get_system_status():
+    """Get overall system status"""
+    try:
+        logger.info("📊 Getting system status")
+        
+        # Check various system components
+        chatbot_healthy = await chatbot.health_check()
+        vector_store_healthy = True  # You might want to add a health check method
+        
+        status = {
+            "status": "healthy" if chatbot_healthy and vector_store_healthy else "unhealthy",
+            "components": {
+                "chatbot": "healthy" if chatbot_healthy else "unhealthy",
+                "vector_store": "healthy" if vector_store_healthy else "unhealthy"
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return status
+        
+    except Exception as e:
+        logger.error(f"Error getting system status: {e}")
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@app.get("/api/sync-statistics")
+async def get_sync_statistics():
+    """Get detailed sync statistics and history"""
+    try:
+        from data_connectors import DataSyncManager
+        sync_manager = DataSyncManager()
+        await sync_manager.initialize()
+        
+        stats = await sync_manager.get_sync_statistics()
+        return stats
+        
+    except Exception as e:
+        logger.error(f"Error getting sync statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/force-full-sync")
+async def force_full_sync(source_name: str = None):
+    """Force a full sync for a specific source or all sources"""
+    try:
+        from data_connectors import DataSyncManager
+        sync_manager = DataSyncManager()
+        await sync_manager.initialize()
+        
+        result = await sync_manager.force_full_sync(source_name)
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in force full sync: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # WebSocket endpoint for real-time chat
