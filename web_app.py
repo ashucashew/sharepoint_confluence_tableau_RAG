@@ -308,35 +308,6 @@ async def get_collection_stats():
         logger.error(f"Error getting collection stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/status")
-async def get_system_status():
-    """Get overall system status"""
-    try:
-        logger.info("📊 Getting system status")
-        
-        # Check various system components
-        chatbot_healthy = await chatbot.health_check()
-        vector_store_healthy = True  # You might want to add a health check method
-        
-        status = {
-            "status": "healthy" if chatbot_healthy and vector_store_healthy else "unhealthy",
-            "components": {
-                "chatbot": "healthy" if chatbot_healthy else "unhealthy",
-                "vector_store": "healthy" if vector_store_healthy else "unhealthy"
-            },
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        return status
-        
-    except Exception as e:
-        logger.error(f"Error getting system status: {e}")
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }
-
 @app.get("/api/sync-statistics")
 async def get_sync_statistics():
     """Get detailed sync statistics and history"""

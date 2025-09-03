@@ -43,21 +43,27 @@ def check_rag_health():
         print(f"❌ Error checking RAG health: {e}")
         raise
 
-# Task 2: Get system status
-def get_system_status():
-    """Get current system status"""
+# Task 2: Check system status
+def check_system_status():
+    """Check system status"""
     try:
-        response = requests.get("http://localhost:8000/api/status", timeout=10)
+        print("📊 Checking system status")
+        
+        response = requests.get("http://localhost:8000/health", timeout=10)
         if response.status_code == 200:
-            status = response.json()
-            print(f"📊 System Status: {json.dumps(status, indent=2)}")
-            return status
+            result = response.json()
+            status = result.get("status", "unknown")
+            chatbot_status = result.get("chatbot", "unknown")
+            
+            print(f"✅ System status: {status}")
+            print(f"✅ Chatbot status: {chatbot_status}")
+            return result
         else:
-            print("❌ Could not get system status")
+            print(f"❌ Status check failed with status {response.status_code}")
             return None
     except Exception as e:
-        print(f"❌ Error getting system status: {e}")
-        raise
+        print(f"❌ Error checking system status: {e}")
+        return None
 
 # Task 3: Sync data sources
 def sync_data_sources():
@@ -98,7 +104,7 @@ health_check_task = PythonOperator(
 
 status_task = PythonOperator(
     task_id='get_status',
-    python_callable=get_system_status,
+    python_callable=check_system_status,
     dag=dag
 )
 

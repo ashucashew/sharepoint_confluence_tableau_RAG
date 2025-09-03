@@ -82,26 +82,18 @@ TABLEAU_PASSWORD=your_password
 - **Fallback**: Full sync after 7 days of no sync
 - **Override**: Force full sync via API or DAG parameter
 
-## API Endpoints
+### API Endpoints
 
-### **Sync Operations**
+The system provides several REST API endpoints:
 
-```bash
-# Sync all sources (incremental by default)
-POST /api/sync
-
-# Sync specific source
-POST /api/sync/{source_name}
-
-# Force full sync
-POST /api/force-full-sync?source_name=confluence
-
-# Get sync status
-GET /api/sync-status
-
-# Get detailed statistics
-GET /api/sync-statistics
-```
+- `POST /api/chat` - Send a chat message
+- `POST /api/search` - Search documents directly
+- `POST /api/sync` - Trigger data synchronization
+- `GET /health` - Health check endpoint (system status)
+- `GET /api/sync-status` - Get sync status for all sources
+- `GET /api/sync-statistics` - Get detailed sync statistics
+- `GET /api/conversation-history` - Get chat history
+- `DELETE /api/conversation-history` - Clear chat history
 
 ### **Response Format**
 
