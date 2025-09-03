@@ -140,6 +140,26 @@
                                     <i class="fas fa-paper-plane"></i>
                                 </button>
                             </form>
+                            
+                            <!-- Query Rewriting Display -->
+                            <div id="queryRewritingDisplay" class="mt-3 hidden">
+                                <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <div class="flex items-center text-sm text-blue-800">
+                                        <i class="fas fa-magic mr-2"></i>
+                                        <span class="font-medium">Query Rewriting:</span>
+                                    </div>
+                                    <div class="mt-2 space-y-1">
+                                        <div class="text-xs text-blue-700">
+                                            <span class="font-medium">Original:</span> 
+                                            <span id="originalQuery" class="italic"></span>
+                                        </div>
+                                        <div class="text-xs text-blue-700">
+                                            <span class="font-medium">Rewritten:</span> 
+                                            <span id="rewrittenQuery" class="italic font-semibold"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -363,6 +383,11 @@
                 .then(data => {
                     displayMessage(data.response, 'assistant', data.sources);
                     hideTypingIndicator();
+                    
+                    // Show query rewriting info if available
+                    if (data.query_info) {
+                        showQueryRewriting(data.query_info.original_query, data.query_info.rewritten_query);
+                    }
                 })
                 .catch(error => {
                     console.error('Error:', error);
@@ -370,6 +395,29 @@
                     hideTypingIndicator();
                 });
             }
+        }
+
+        // Show query rewriting information
+        function showQueryRewriting(originalQuery, rewrittenQuery) {
+            const display = document.getElementById('queryRewritingDisplay');
+            const originalSpan = document.getElementById('originalQuery');
+            const rewrittenSpan = document.getElementById('rewrittenQuery');
+            
+            if (originalQuery && rewrittenQuery) {
+                originalSpan.textContent = originalQuery;
+                rewrittenSpan.textContent = rewrittenQuery;
+                display.classList.remove('hidden');
+                
+                // Hide after 10 seconds
+                setTimeout(() => {
+                    display.classList.add('hidden');
+                }, 10000);
+            }
+        }
+
+        // Hide query rewriting display
+        function hideQueryRewriting() {
+            document.getElementById('queryRewritingDisplay').classList.add('hidden');
         }
 
         // Search documents

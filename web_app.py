@@ -2,7 +2,7 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import uuid
-from fastapi import FastAPI, HTTPException, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -11,9 +11,14 @@ from pydantic import BaseModel
 import json
 
 from rag_chatbot import RAGChatbot
-from data_sync_manager import DataSyncManager
+from vector_store import VectorStore
 from config import settings
 from loguru import logger
+
+# Configure logging
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -24,7 +29,7 @@ app = FastAPI(
 
 # Initialize components
 chatbot = RAGChatbot()
-sync_manager = DataSyncManager()
+vector_store = VectorStore()
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -50,18 +55,13 @@ class SearchRequest(BaseModel):
     n_results: int = 5
     filter_source: Optional[str] = None
 
-class SyncRequest(BaseModel):
-    source_name: Optional[str] = None
-    force_full_sync: bool = False
-
 # Startup event
 @app.on_event("startup")
 async def startup_event():
     """Initialize components on startup"""
     try:
         await chatbot.initialize()
-        await sync_manager.initialize()
-        sync_manager.start_scheduled_sync()
+        await vector_store.initialize()
         logger.info("Web application started successfully")
     except Exception as e:
         logger.error(f"Error during startup: {e}")
@@ -71,7 +71,6 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on shutdown"""
     try:
-        await sync_manager.cleanup()
         logger.info("Web application shutdown successfully")
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
@@ -124,6 +123,9 @@ async def chat_endpoint(request: ChatRequest):
 async def search_endpoint(request: SearchRequest):
     """Search documents endpoint"""
     try:
+        # Get rewritten query for logging with conversation context
+        rewritten_query = await chatbot._rewrite_query(request.query, chatbot.conversation_history)
+        
         results = await chatbot.search_documents(
             query=request.query,
             n_results=request.n_results,
@@ -132,7 +134,8 @@ async def search_endpoint(request: SearchRequest):
         
         return {
             "results": results,
-            "query": request.query,
+            "original_query": request.query,
+            "rewritten_query": rewritten_query,
             "total_results": len(results)
         }
         
@@ -140,72 +143,29 @@ async def search_endpoint(request: SearchRequest):
         logger.error(f"Error in search endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/sync")
-async def sync_endpoint(request: SyncRequest, background_tasks: BackgroundTasks):
-    """Sync data sources endpoint"""
+@app.post("/api/rewrite-query")
+async def rewrite_query_endpoint(request: dict):
+    """Rewrite a query for better retrieval"""
     try:
-        if request.source_name:
-            # Sync specific source
-            result = await sync_manager.sync_single_source(
-                source_name=request.source_name,
-                force_full_sync=request.force_full_sync
-            )
-        else:
-            # Sync all sources
-            result = await sync_manager.sync_all_sources(
-                force_full_sync=request.force_full_sync
-            )
+        query = request.get("query", "")
+        conversation_history = request.get("conversation_history", [])
         
-        return result
+        if not query:
+            raise HTTPException(status_code=400, detail="Query is required")
         
-    except Exception as e:
-        logger.error(f"Error in sync endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/status")
-async def status_endpoint():
-    """Get system status"""
-    try:
-        chatbot_stats = await chatbot.get_chatbot_stats()
-        sync_status = await sync_manager.get_sync_status()
+        # Use conversation history if provided, otherwise use chatbot's history
+        history_to_use = conversation_history if conversation_history else chatbot.conversation_history
+        rewritten_query = await chatbot._rewrite_query(query, history_to_use)
         
         return {
-            "chatbot": chatbot_stats,
-            "sync_manager": sync_status,
-            "system_health": await chatbot.health_check()
+            "original_query": query,
+            "rewritten_query": rewritten_query,
+            "conversation_context_used": len(history_to_use) > 0,
+            "timestamp": datetime.now().isoformat()
         }
         
     except Exception as e:
-        logger.error(f"Error in status endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/conversation-history")
-async def conversation_history_endpoint(conversation_id: Optional[str] = None, limit: int = 10):
-    """Get conversation history"""
-    try:
-        history = await chatbot.get_conversation_history(
-            conversation_id=conversation_id,
-            limit=limit
-        )
-        
-        return {
-            "history": history,
-            "conversation_id": conversation_id
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in conversation history endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.delete("/api/conversation-history")
-async def clear_conversation_history_endpoint(conversation_id: Optional[str] = None):
-    """Clear conversation history"""
-    try:
-        await chatbot.clear_conversation_history(conversation_id)
-        return {"message": "Conversation history cleared successfully"}
-        
-    except Exception as e:
-        logger.error(f"Error in clear conversation history endpoint: {e}")
+        logger.error(f"Error in query rewriting endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # WebSocket endpoint for real-time chat
@@ -244,12 +204,10 @@ async def health_check():
     """Health check endpoint"""
     try:
         chatbot_healthy = await chatbot.health_check()
-        sync_healthy = await sync_manager.health_check()
         
         return {
-            "status": "healthy" if chatbot_healthy and sync_healthy else "unhealthy",
+            "status": "healthy" if chatbot_healthy else "unhealthy",
             "chatbot": chatbot_healthy,
-            "sync_manager": sync_healthy,
             "timestamp": datetime.now().isoformat()
         }
         

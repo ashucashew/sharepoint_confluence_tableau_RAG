@@ -50,9 +50,13 @@ class RAGChatbot:
             await self.initialize()
         
         try:
-            # Search for relevant documents
+            # Rewrite the query for better retrieval
+            rewritten_query = await self._rewrite_query(user_message)
+            logger.info(f"Original query: '{user_message}' -> Rewritten: '{rewritten_query}'")
+            
+            # Search for relevant documents using rewritten query
             search_results = await self.vector_store.search(
-                query=user_message,
+                query=rewritten_query,
                 n_results=max_sources
             )
             
@@ -80,7 +84,11 @@ class RAGChatbot:
                 "response": response,
                 "sources": sources,
                 "conversation_id": conversation_id,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
+                "query_info": {
+                    "original_query": user_message,
+                    "rewritten_query": rewritten_query
+                }
             }
             
         except Exception as e:
@@ -136,12 +144,13 @@ class RAGChatbot:
             system_prompt = self._create_system_prompt(include_sources)
             
             # Create user prompt with context
-            user_prompt = f"""Based on the following context from your team's documents, please answer the user's question:
+            user_prompt = f"""Based on the following context from your team's documents, 
+            please answer the user's question:
 
-Context:
-{context}
+            Context:
+            {context}
 
-User Question: {user_message}
+            User Question: {user_message}
 
 Please provide a helpful and accurate response based on the context provided. If the context doesn't contain enough information to answer the question, please say so and suggest where they might find more information."""
 
@@ -158,6 +167,115 @@ Please provide a helpful and accurate response based on the context provided. If
             logger.error(f"Error generating response: {e}")
             return "I apologize, but I encountered an error while generating a response. Please try again."
     
+    async def _rewrite_query(self, user_query: str, conversation_history: List[Dict] = None) -> str:
+        """Rewrite user query to improve retrieval using Tesla energy industry knowledge and conversation context"""
+        try:
+            system_prompt = """You are a query rewriting assistant for documentation 
+            search on a team that investigates issues with Tesla's Residential energy fleet. 
+            Rewrite the user's question to maximize correct retrieval while keeping the core meaning of the original query. 
+            First consider the conversation history to understand context and references, paying attention
+            to pronouns and follow-up questions. Then Think about the components of Tesla's energy products, 
+            use industry-specific terms, expand on ambiguous parts, and add relevant synonyms or acronyms 
+            (e.g. PW3 for Powerwall 3).
+
+            Conversation Context Examples:
+            
+            Example 1 - Follow-up question:
+            Previous: "What are main causes of arcing in PW3 sites?"
+            Current: "how about PW2?"
+            Output: "What are main causes of arcing in Powerwall 2 PW2 sites? (following up on previous question about arcing in Powerwall 3 sites)"
+            
+            Example 2 - Pronoun reference:
+            Previous: "Powerwall not charging properly"
+            Current: "what about the inverter?"
+            Output: "What about Powerwall inverter issues related to charging problems? (referring to inverter problems causing Powerwall charging issues)"
+            
+            Example 3 - Topic continuation:
+            Previous: "Solar panels underperforming"
+            Current: "any other causes?"
+            Output: "What are other causes of solar panel underperformance beyond what was mentioned? (continuing discussion about solar panel performance issues)"
+            
+            Example 4 - Product comparison:
+            Previous: "PW3 installation guide"
+            Current: "same for PW2?"
+            Output: "Powerwall 2 PW2 installation guide (asking for similar installation information for Powerwall 2 as was provided for Powerwall 3)"
+
+            Key Tesla Energy Products and Acronyms:
+            - Powerwall (PW, PW2: Powerwall 2, PW3: Powerwall 3)
+            - Solar Panels (Solar Roof, Solar Panels, PV)
+            - Solar Inverter (PVI PVCOM: Legacy Solar Inverter, PVI-45:Solar Inverter 45)
+            - Gateway (GW, Backup Gateway, Backup Gateway 2)
+            - Backup Switch (BS, Backup Switch 2)
+            - Wall Connector (WC, Gen 3, Gen 4)
+            - Energy Management System (EMS)
+            - TOU (Time of Use) rates
+
+            Common Issues and Terms:
+            - Inverter faults, communication errors, grid disconnections
+            - Battery degradation, capacity loss, cycle count
+            - Solar production issues, shading, panel failures
+            - Installation problems, mounting, wiring
+            - Software bugs, firmware updates, app issues
+            - Grid integration, utility communication, interconnection
+            - Performance monitoring, data logging, analytics
+
+            Example for adding more keywords and details to the query:
+            Input: "I am seeing solar underperformance on a particular site, what could be the reason?"
+            Output: "What are some causes of solar system underperformance on a residential Tesla Energy site (solar panels / PV array). 
+            What factors could lead to reduced solar generation output, such as inverter efficiency issues, DC/AC conversion losses, shading, 
+            soiling, wiring or connection faults, rapid shutdown device problems, degradation of PV modules, monitoring calibration errors, 
+            or site-specific environmental conditions?"
+
+
+            
+
+            
+            """
+
+            # Prepare conversation context for the prompt
+            conversation_context = ""
+            if conversation_history and len(conversation_history) > 0:
+                # Get last 3 user messages for context (excluding current query)
+                recent_messages = conversation_history[-3:]  # Last 3 messages
+                conversation_context = "Recent conversation context:\n"
+                for i, msg in enumerate(recent_messages, 1):
+                    if msg.get('user_message'):
+                        conversation_context += f"{i}. User: {msg['user_message']}\n"
+                        if msg.get('assistant_response'):
+                            conversation_context += f"   Assistant: {msg['assistant_response'][:200]}...\n"
+                conversation_context += "\n"
+            
+            user_prompt = f"""{conversation_context}Original query: {user_query}
+
+Please rewrite this query considering the conversation context above. If this is a follow-up question, incorporate relevant details from the conversation.
+
+Rewritten query:"""
+
+            # Generate rewritten query
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ]
+            
+            response = await self.llm.agenerate([messages])
+            rewritten_query = response.generations[0][0].text.strip()
+            
+            # Clean up the response (remove any extra text)
+            if "\n" in rewritten_query:
+                rewritten_query = rewritten_query.split("\n")[0].strip()
+            
+            # Fallback to original query if rewriting fails
+            if not rewritten_query or len(rewritten_query) < 5:
+                logger.warning(f"Query rewriting failed, using original query: {user_query}")
+                return user_query
+            
+            return rewritten_query
+            
+        except Exception as e:
+            logger.error(f"Error rewriting query: {e}")
+            # Fallback to original query
+            return user_query
+
     def _create_system_prompt(self, include_sources: bool) -> str:
         """Create the system prompt for the chatbot"""
         base_prompt = """You are a helpful AI assistant for a team's knowledge base. You have access to documents from multiple sources including:
@@ -174,7 +292,7 @@ Your role is to:
 - Focus on practical, actionable information
 
 Guidelines:
-- Always base your responses on the provided context
+- Always base your responses on the team's documents
 - Be concise but thorough
 - Use a professional but friendly tone
 - If the context doesn't contain relevant information, acknowledge this and suggest alternative sources
@@ -192,14 +310,18 @@ Guidelines:
             await self.initialize()
         
         try:
+            # Rewrite the query for better retrieval
+            rewritten_query = await self._rewrite_query(query)
+            logger.info(f"Search - Original query: '{query}' -> Rewritten: '{rewritten_query}'")
+            
             # Prepare filter
             filter_metadata = None
             if filter_source:
                 filter_metadata = {"source_type": filter_source}
             
-            # Search vector store
+            # Search vector store with rewritten query
             results = await self.vector_store.search(
-                query=query,
+                query=rewritten_query,
                 n_results=n_results,
                 filter_metadata=filter_metadata
             )
