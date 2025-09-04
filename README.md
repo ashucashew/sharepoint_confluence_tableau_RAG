@@ -101,12 +101,6 @@ The system uses Apache Airflow for production-grade orchestration of data pipeli
   - Manual sync trigger
   - Completion logging
 
-### **Custom Airflow Operators:**
-
-- **`RAGHealthCheckOperator`**: Checks RAG system health
-- **`RAGSyncOperator`**: Syncs specific data sources
-- **`RAGCleanupOperator`**: Cleans up orphaned documents
-- **`RAGStatsOperator`**: Collects system statistics
 
 ### **Benefits of Airflow Integration:**
 
@@ -455,7 +449,6 @@ pip install -r requirements-airflow.txt
 ```bash
 export AIRFLOW_HOME=$HOME/airflow
 export AIRFLOW__CORE__DAGS_FOLDER=$(pwd)/dags
-export AIRFLOW__CORE__PLUGINS_FOLDER=$(pwd)/plugins
 ```
 
 #### **3. Initialize and Start:**

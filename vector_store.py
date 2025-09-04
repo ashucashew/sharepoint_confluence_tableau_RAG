@@ -635,26 +635,3 @@ class VectorStore:
             logger.error(f"Error getting all documents from vector store: {e}")
             return []
     
-    async def delete_documents_by_metadata(self, filter_metadata: Dict[str, Any]) -> bool:
-        """Delete documents based on metadata filter"""
-        if not self.initialized:
-            await self.initialize()
-        
-        try:
-            # Get documents matching the filter
-            documents = await self.get_all_documents(filter_metadata)
-            
-            if documents:
-                # Extract IDs and delete
-                doc_ids = [doc["id"] for doc in documents]
-                self.collection.delete(ids=doc_ids)
-                
-                logger.info(f"Deleted {len(documents)} documents matching filter: {filter_metadata}")
-                return True
-            else:
-                logger.info(f"No documents found matching filter: {filter_metadata}")
-                return True
-                
-        except Exception as e:
-            logger.error(f"Error deleting documents by metadata: {e}")
-            return False 

@@ -56,21 +56,6 @@ def check_rag_system_health():
         logging.error(f"Health check failed: {e}")
         raise
 
-def get_sync_status():
-    """Get current sync status from all data sources"""
-    try:
-        response = requests.get(f"{RAG_API_BASE_URL}/api/sync-status", timeout=30)
-        response.raise_for_status()
-        
-        status_data = response.json()
-        logging.info(f"📊 Sync status: {json.dumps(status_data, indent=2)}")
-        
-        return status_data
-        
-    except Exception as e:
-        logging.error(f"Failed to get sync status: {e}")
-        raise
-
 def sync_all_sources():
     """Sync all data sources using the consolidated sync endpoint"""
     try:
@@ -140,6 +125,30 @@ def get_embedding_stats():
         logging.error(f"Error getting embedding stats: {e}")
         raise
 
+def get_sync_statistics():
+    """Get detailed sync statistics and history"""
+    try:
+        logging.info("📊 Getting sync statistics")
+        
+        response = requests.get(f"{RAG_API_BASE_URL}/api/sync-statistics", timeout=60)
+        response.raise_for_status()
+        
+        result = response.json()
+        logging.info(f"📊 Sync statistics result: {json.dumps(result, indent=2)}")
+        
+        sync_stats_data = result.get("data", {})
+        
+        logging.info("📊 Sync statistics collected successfully")
+        
+        return {
+            "status": "success",
+            "sync_statistics": sync_stats_data
+        }
+        
+    except Exception as e:
+        logging.error(f"Error getting sync statistics: {e}")
+        raise
+
 def generate_daily_report(**context):
     """Generate daily report of the embedding pipeline"""
     try:
@@ -154,13 +163,15 @@ def generate_daily_report(**context):
             sync_results = []
         
         stats_result = ti.xcom_pull(task_ids='get_embedding_stats')
+        sync_stats_result = ti.xcom_pull(task_ids='get_sync_statistics')
         
         # Generate report
         report = {
             "date": datetime.now().strftime("%Y-%m-%d"),
             "pipeline_status": "completed",
             "sync_results": sync_results,
-            "stats": stats_result
+            "embedding_stats": stats_result,
+            "sync_statistics": sync_stats_result
         }
         
         # Store report in XCom
@@ -182,14 +193,6 @@ health_check = PythonOperator(
     python_callable=check_rag_system_health,
     dag=dag
 )
-
-# Get initial sync status
-get_sync_status_task = PythonOperator(
-    task_id='get_sync_status',
-    python_callable=get_sync_status,
-    dag=dag
-)
-
 # Sync all data sources
 sync_all_sources_task = PythonOperator(
     task_id='sync_all_sources',
@@ -201,6 +204,13 @@ sync_all_sources_task = PythonOperator(
 get_embedding_stats_task = PythonOperator(
     task_id='get_embedding_stats',
     python_callable=get_embedding_stats,
+    dag=dag
+)
+
+# Get sync statistics
+get_sync_statistics_task = PythonOperator(
+    task_id='get_sync_statistics',
+    python_callable=get_sync_statistics,
     dag=dag
 )
 
@@ -218,7 +228,7 @@ health_check >> get_sync_status_task
 get_sync_status_task >> sync_all_sources_task
 
 # Get statistics after sync
-sync_all_sources_task >> get_embedding_stats_task
+sync_all_sources_task >> [get_embedding_stats_task, get_sync_statistics_task]
 
 # Reporting
-get_embedding_stats_task >> generate_report
+[get_embedding_stats_task, get_sync_statistics_task] >> generate_report

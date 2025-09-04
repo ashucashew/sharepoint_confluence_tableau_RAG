@@ -193,21 +193,6 @@ async def sync_all_sources(request: SyncRequest = SyncRequest()):
     except Exception as e:
         logger.error(f"Error in sync all sources: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/sync-status")
-async def get_sync_status():
-    """Get sync status for all data sources"""
-    try:
-        logger.info("📊 Getting sync status")
-        
-        # Use the sync manager
-        from data_connectors import DataSyncManager
-        sync_manager = DataSyncManager()
-        await sync_manager.initialize()
-        
-        status = await sync_manager.get_sync_status()
-        
-        return status
         
     except Exception as e:
         logger.error(f"Error getting sync status: {e}")
@@ -219,47 +204,21 @@ async def get_embedding_stats():
     try:
         logger.info("📊 Getting embedding statistics")
         
-        # This would call your vector store stats method
-        # For now, returning mock data
-        stats = {
-            "status": "success",
-            "data": {
-                "total_embeddings": 0,
-                "embedding_models": {},
-                "chunk_types": {},
-                "embedding_age_stats": {}
-            }
-        }
+        # Get stats from vector store
+        stats = await chatbot.vector_store.get_embedding_stats()
         
-        return stats
+        if "error" in stats:
+            raise HTTPException(status_code=500, detail=stats["error"])
+        
+        return {
+            "status": "success",
+            "data": stats
+        }
         
     except Exception as e:
         logger.error(f"Error getting embedding stats: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/collection-stats")
-async def get_collection_stats():
-    """Get collection statistics"""
-    try:
-        logger.info("📊 Getting collection statistics")
-        
-        # This would call your vector store collection stats method
-        # For now, returning mock data
-        stats = {
-            "status": "success",
-            "data": {
-                "total_documents": 0,
-                "total_chunks": 0,
-                "collection_size_mb": 0,
-                "last_updated": datetime.now().isoformat()
-            }
-        }
-        
-        return stats
-        
-    except Exception as e:
-        logger.error(f"Error getting collection stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/sync-statistics")
 async def get_sync_statistics():

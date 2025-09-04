@@ -94,7 +94,6 @@ The system provides the following API endpoints for data synchronization:
 ### Health and Monitoring
 - **`GET /health`** - System health check
 - **`GET /api/embedding-stats`** - Get embedding statistics
-- **`GET /api/collection-stats`** - Get collection statistics
 
 ### Chat and Search
 - **`POST /api/chat`** - Chat with the RAG system
@@ -190,7 +189,7 @@ sync_task = PythonOperator(
 The main `rag_embedding_pipeline.py` DAG now follows this simplified workflow:
 
 ```
-health_check → get_sync_status → sync_all_sources → get_embedding_stats → generate_report
+health_check → get_sync_status → sync_all_sources → [get_embedding_stats, get_sync_statistics] → generate_report
 ```
 
 **Key Benefits:**
