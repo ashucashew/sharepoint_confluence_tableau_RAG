@@ -58,10 +58,7 @@ class SearchRequest(BaseModel):
     filter_source: Optional[str] = None
 
 class SyncRequest(BaseModel):
-    force_full_sync: bool = False
-
-class EmbeddingRefreshRequest(BaseModel):
-    embedding_created_at: Dict[str, str]
+    pass
 
 # Startup event
 @app.on_event("startup")
@@ -188,33 +185,13 @@ async def sync_all_sources(request: SyncRequest = SyncRequest()):
         sync_manager = DataSyncManager()
         await sync_manager.initialize()
         
-        result = await sync_manager.sync_all_sources(request.force_full_sync)
+        result = await sync_manager.sync_all_sources()
         
         logger.info("✅ Sync of all sources completed")
         return result
         
     except Exception as e:
         logger.error(f"Error in sync all sources: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/sync/{source_name}")
-async def sync_source(source_name: str, request: SyncRequest = SyncRequest()):
-    """Sync a specific data source"""
-    try:
-        logger.info(f"🔄 Starting sync for {source_name}")
-        
-        # Use the sync manager
-        from data_connectors import DataSyncManager
-        sync_manager = DataSyncManager()
-        await sync_manager.initialize()
-        
-        result = await sync_manager.sync_source(source_name, request.force_full_sync)
-        
-        logger.info(f"✅ Sync for {source_name} completed")
-        return result
-        
-    except Exception as e:
-        logger.error(f"Error syncing {source_name}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/sync-status")
@@ -234,30 +211,6 @@ async def get_sync_status():
         
     except Exception as e:
         logger.error(f"Error getting sync status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/embeddings/refresh")
-async def refresh_embeddings(request: EmbeddingRefreshRequest):
-    """Refresh old embeddings"""
-    try:
-        logger.info("🔄 Starting embedding refresh")
-        
-        # This would call your vector store refresh method
-        # For now, returning mock data
-        result = {
-            "status": "success",
-            "data": {
-                "documents_to_refresh": 0,
-                "refresh_timestamp": datetime.now().isoformat(),
-                "criteria": request.embedding_created_at
-            }
-        }
-        
-        logger.info("✅ Embedding refresh analysis completed")
-        return result
-        
-    except Exception as e:
-        logger.error(f"Error during embedding refresh: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/embedding-stats")
@@ -323,20 +276,7 @@ async def get_sync_statistics():
         logger.error(f"Error getting sync statistics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/force-full-sync")
-async def force_full_sync(source_name: str = None):
-    """Force a full sync for a specific source or all sources"""
-    try:
-        from data_connectors import DataSyncManager
-        sync_manager = DataSyncManager()
-        await sync_manager.initialize()
-        
-        result = await sync_manager.force_full_sync(source_name)
-        return result
-        
-    except Exception as e:
-        logger.error(f"Error in force full sync: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+
 
 # WebSocket endpoint for real-time chat
 @app.websocket("/ws/chat")

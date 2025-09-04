@@ -82,123 +82,56 @@ TABLEAU_PASSWORD=your_password
 - **Fallback**: Full sync after 7 days of no sync
 - **Override**: Force full sync via API or DAG parameter
 
-### API Endpoints
+## API Endpoints
 
-The system provides several REST API endpoints:
+The system provides the following API endpoints for data synchronization:
 
-- `POST /api/chat` - Send a chat message
-- `POST /api/search` - Search documents directly
-- `POST /api/sync` - Trigger data synchronization
-- `GET /health` - Health check endpoint (system status)
-- `GET /api/sync-status` - Get sync status for all sources
-- `GET /api/sync-statistics` - Get detailed sync statistics
-- `GET /api/conversation-history` - Get chat history
-- `DELETE /api/conversation-history` - Clear chat history
+### Core Sync Endpoints
+- **`POST /api/sync`** - Sync all data sources
+- **`GET /api/sync-status`** - Get sync status for all sources
+- **`GET /api/sync-statistics`** - Get detailed sync history and statistics
 
-### **Response Format**
+### Health and Monitoring
+- **`GET /health`** - System health check
+- **`GET /api/embedding-stats`** - Get embedding statistics
+- **`GET /api/collection-stats`** - Get collection statistics
 
-```json
-{
-  "status": "success",
-  "result": {
-    "source": "confluence",
-    "sync_strategy": "incremental",
-    "documents_processed": 25,
-    "documents_added": 3,
-    "documents_updated": 2,
-    "documents_deleted": 0,
-    "sync_timestamp": "2024-01-15T02:00:00",
-    "last_sync_time": "2024-01-14T02:00:00"
-  }
-}
-```
-
-## Airflow Integration
-
-### **DAG Behavior**
-
-The Airflow DAGs automatically use incremental sync:
-
-```python
-# In your DAG
-sync_task = PythonOperator(
-    task_id='sync_data',
-    python_callable=lambda: requests.post("http://localhost:8000/api/sync")
-)
-```
-
-### **Monitoring**
-
-- **Sync Strategy**: Track which strategy was used
-- **Performance**: Monitor sync times and document counts
-- **Errors**: Automatic retry and notification on failures
-
-## Testing
-
-### **Test Script**
-
-Run the test script to verify functionality:
-
-```bash
-python test_incremental_sync.py
-```
-
-This will:
-1. Perform first sync (full)
-2. Perform second sync (incremental)
-3. Force full sync
-4. Display statistics
-5. Show sync status
-
-### **Expected Output**
-
-```
-🧪 Testing Incremental Sync Functionality
-==================================================
-
-1️⃣ First sync (should be full sync)
-------------------------------
-Status: success
-Overall Strategy: first_time
-Documents Processed: 150
-Documents Added: 150
-Documents Updated: 0
-
-2️⃣ Second sync (should be incremental)
-------------------------------
-Status: success
-Overall Strategy: incremental
-Documents Processed: 5
-Documents Added: 2
-Documents Updated: 3
-```
+### Chat and Search
+- **`POST /api/chat`** - Chat with the RAG system
+- **`POST /api/search`** - Search documents
+- **`WebSocket /ws/chat`** - Real-time chat interface
 
 ## Troubleshooting
 
-### **Common Issues and Solutions**
+### Common Issues
 
-#### **1. RAG System Issues**
-- **Chatbot Not Responding**: Check OpenAI API key and vector store initialization
-- **Poor Search Results**: Verify document sync status and embedding quality
-- **Query Rewriting Failures**: Check OpenAI API connectivity
+1. **Sync Fails on First Run**
+   - Ensure all data source credentials are properly configured
+   - Check network connectivity to data sources
+   - Verify vector store initialization
 
-#### **2. Airflow Pipeline Issues**
-- **DAG Failures**: Check Airflow logs and system health
-- **Sync Failures**: Verify data source credentials and permissions
-- **Performance Issues**: Monitor resource usage and optimize DAG scheduling
+2. **Incremental Sync Not Working**
+   - Check if `sync_history.json` exists and is readable
+   - Verify last sync timestamps in the history file
+   - Ensure data sources support `fetch_recent_documents`
 
-#### **3. Data Source Issues**
-- **Connection Errors**: Verify API credentials, URLs, and network connectivity
-- **Rate Limiting**: Check API quotas and implement backoff strategies
-- **Authentication Failures**: Ensure proper token management and rotation
+3. **Documents Not Being Deleted**
+   - Check vector store permissions
+   - Verify document ID matching between source and vector store
+   - Review sync logs for deletion errors
 
-### **Debug Mode**
+4. **Performance Issues**
+   - Monitor sync duration in logs
+   - Check vector store performance metrics
+   - Consider adjusting chunk sizes if processing is slow
+
+### Debug Mode
 
 Enable debug mode by setting `DEBUG=True` in your `.env` file for detailed logging.
 
 ## Best Practices
 
-### **Production Deployment**
+### Production Deployment
 
 1. **Monitor Sync Performance**
    - Track sync times and document counts
@@ -215,7 +148,7 @@ Enable debug mode by setting `DEBUG=True` in your `.env` file for detailed loggi
    - Validate document counts
    - Check deletion counts in sync statistics
 
-### **Maintenance**
+### Maintenance
 
 1. **Regular Reviews**
    - Check sync history monthly
@@ -227,28 +160,47 @@ Enable debug mode by setting `DEBUG=True` in your `.env` file for detailed loggi
    - Document sync procedures
    - Test recovery processes
 
-## Future Enhancements
-
-### **Planned Features**
-
-- **Smart Scheduling**: Adaptive sync intervals based on change frequency
-- **Conflict Resolution**: Advanced merging for conflicting documents
-- **Performance Optimization**: Parallel processing for large datasets
-- **Real-time Sync**: Webhook-based immediate updates
-
-### **Customization**
-
-- **Configurable Thresholds**: Adjust 7-day fallback period
-- **Source-Specific Rules**: Different sync strategies per source
-- **Advanced Filtering**: Sync only specific document types or spaces
-
 ## Conclusion
 
 The incremental sync system transforms your RAG pipeline from a resource-intensive nightly process to an efficient, intelligent system that adapts to your data change patterns. This results in:
 
 - **Faster syncs** (90%+ improvement)
 - **Lower costs** (reduced API calls and processing)
-- **Better reliability** (automatic fallbacks and monitoring)
+- **Better reliability** (automatic monitoring)
 - **Improved insights** (detailed analytics and performance tracking)
 
 The system automatically handles the complexity while providing full visibility into its operations through comprehensive APIs and monitoring tools.
+
+## Airflow Integration
+
+### **DAG Behavior**
+
+The Airflow DAGs automatically use incremental sync:
+
+```python
+# In your DAG
+sync_task = PythonOperator(
+    task_id='sync_all_sources',
+    python_callable=lambda: requests.post("http://localhost:8000/api/sync")
+)
+```
+
+### **Main DAG Structure**
+
+The main `rag_embedding_pipeline.py` DAG now follows this simplified workflow:
+
+```
+health_check → get_sync_status → sync_all_sources → get_embedding_stats → generate_report
+```
+
+**Key Benefits:**
+- **Single API Call**: One call to `/api/sync` handles all data sources
+- **Automatic Strategy Selection**: System chooses full vs incremental automatically
+- **Consolidated Results**: All source results in one response
+- **Simplified Dependencies**: Linear workflow instead of parallel branches
+
+### **Monitoring**
+
+- **Sync Strategy**: Track which strategy was used (first_time, incremental)
+- **Performance**: Monitor sync times and document counts across all sources
+- **Errors**: Automatic retry and notification on failures

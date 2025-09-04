@@ -84,8 +84,8 @@ class DataSyncManager:
         
         self._save_sync_history(history)
     
-    async def sync_source(self, source_name: str, force_full_sync: bool = False) -> Dict[str, Any]:
-        """Sync a specific data source with incremental logic"""
+    async def sync_source(self, source_name: str) -> Dict[str, Any]:
+        """Sync a specific data source with incremental logic and deleted document cleanup"""
         if not self.initialized:
             await self.initialize()
         
@@ -101,22 +101,12 @@ class DataSyncManager:
             
             # Determine sync strategy
             last_sync_time = self._get_last_sync_time(source_name)
-            sync_strategy = "full" if force_full_sync else "incremental"
             
-            if force_full_sync:
-                logger.info(f"🔄 Force full sync requested for {source_name}")
-                documents = await connector.fetch_documents()
-            elif last_sync_time:
-                # Check if it's been more than 7 days since last sync (fallback to full sync)
-                days_since_sync = (datetime.now() - last_sync_time).days
-                if days_since_sync > 7:
-                    logger.info(f"🔄 Last sync was {days_since_sync} days ago, doing full sync for {source_name}")
-                    documents = await connector.fetch_documents()
-                    sync_strategy = "full_fallback"
-                else:
-                    logger.info(f"🔄 Incremental sync for {source_name} since {last_sync_time}")
-                    documents = await connector.fetch_recent_documents(last_sync_time)
-                    sync_strategy = "incremental"
+            if last_sync_time:
+                # Has been synced before - do incremental
+                logger.info(f"🔄 Incremental sync for {source_name} since {last_sync_time}")
+                documents = await connector.fetch_recent_documents(last_sync_time)
+                sync_strategy = "incremental"
             else:
                 # First time syncing this source
                 logger.info(f"🔄 First time sync for {source_name}, doing full sync")
@@ -246,7 +236,7 @@ class DataSyncManager:
                 "sync_timestamp": datetime.now().isoformat()
             }
     
-    async def sync_all_sources(self, force_full_sync: bool = False) -> Dict[str, Any]:
+    async def sync_all_sources(self) -> Dict[str, Any]:
         """Sync all configured data sources"""
         if not self.initialized:
             await self.initialize()
@@ -286,7 +276,7 @@ class DataSyncManager:
             
             for source in enabled_sources:
                 try:
-                    result = await self.sync_source(source, force_full_sync)
+                    result = await self.sync_source(source)
                     if result.get("status") == "success":
                         sync_data = result.get("result", {})
                         total_processed += sync_data.get("documents_processed", 0)
@@ -470,22 +460,6 @@ class DataSyncManager:
             
         except Exception as e:
             logger.error(f"Error getting sync statistics: {e}")
-            return {
-                "status": "error",
-                "error": str(e)
-            }
-    
-    async def force_full_sync(self, source_name: str = None) -> Dict[str, Any]:
-        """Force a full sync for a specific source or all sources"""
-        try:
-            if source_name:
-                logger.info(f"🔄 Force full sync requested for {source_name}")
-                return await self.sync_source(source_name, force_full_sync=True)
-            else:
-                logger.info("🔄 Force full sync requested for all sources")
-                return await self.sync_all_sources(force_full_sync=True)
-        except Exception as e:
-            logger.error(f"Error in force full sync: {e}")
             return {
                 "status": "error",
                 "error": str(e)
